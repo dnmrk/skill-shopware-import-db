@@ -1,6 +1,6 @@
 ---
 name: shopware-import-db
-description: Use when importing an external SQL dump into the local Shopware MySQL container — e.g. loading a prod/staging/colleague database dump (.sql, .sql.gz, .gz) into the local Docker Shopware database — or when a dump was already imported by hand and the local shop 400s on domain mapping. Backs up any existing data, imports, rewrites sales-channel domains to localhost:8000, and runs the deployment helper.
+description: Use when importing an external SQL dump into the local Shopware MySQL container — e.g. loading a prod/staging/colleague database dump (.sql, .sql.gz, .gz) into the local Docker Shopware database — or when a dump was already imported by hand and the local shop 400s on domain mapping. Backs up any existing data, imports, rewrites sales-channel domains to localhost:8000 (or a custom --base-url), and runs the deployment helper.
 ---
 
 # Shopware: import an external SQL dump locally
@@ -27,11 +27,13 @@ git clone https://github.com/dnmrk/skill-shopware-import-db.git ~/.claude/skills
    ```
    If the DB is missing or empty, the script proceeds without asking.
 
+   **Local URL:** domains are rewritten to `http://localhost:8000` by default. Before running, check `APP_URL` in the project's `.env.local` / `.env`. If it is something else (e.g. `https://shop.local`), append `--base-url=<that URL>` to every command here. It takes `scheme://host[:port]` only, with no path.
+
 4. Report the script's summary (table count, rewritten domains, backup path). Do not re-run verification commands by hand.
 
 **Dump already imported** (the user loaded it themselves, e.g. a QA/staging dump, and only the domains and finalize are missing; symptom: storefront 400 "Domain Mapping Misconfiguration"): run only the post-import steps. No dump file is needed and nothing is dropped. It refuses to run against a missing or empty DB:
 ```bash
-bash ~/.claude/skills/shopware-import-db/import-db.sh --localize-only [db-name] [--no-finalize]
+bash ~/.claude/skills/shopware-import-db/import-db.sh --localize-only [db-name] [--no-finalize] [--base-url=URL]
 ```
 
 ## What the script does
@@ -40,7 +42,7 @@ bash ~/.claude/skills/shopware-import-db/import-db.sh --localize-only [db-name] 
 - Refuses to wipe a populated DB without `--force`.
 - With `--force` on a populated DB: `mysqldump` → `var/db-backups/<db>-<timestamp>.sql.gz`, verifies it is non-empty, then drops + recreates (utf8mb4).
 - Imports (streams `gunzip` for compressed dumps), then asserts tables > 0.
-- Rewrites `sales_channel_domain.url` per distinct source host, keeping each path, in one transaction. The shortest host (usually the apex) becomes `http://localhost:8000`. Every other host becomes `http://localhost:8000/<first-label>`, e.g. `https://directory.shop.example` → `http://localhost:8000/directory`, with `-2`, `-3` suffixes if labels repeat. `url` is UNIQUE, so mapping every host to the bare `localhost:8000` would collide when two channels sit on different bare hosts. If a rewrite would still clash, nothing is changed and the script stops so you can fix the domains by hand.
+- Rewrites `sales_channel_domain.url` per distinct source host, keeping each path, in one transaction. The shortest host (usually the apex) becomes the base URL (`http://localhost:8000` unless `--base-url` is given). Every other host becomes `<base-url>/<first-label>`, e.g. `https://directory.shop.example` → `http://localhost:8000/directory`, with `-2`, `-3` suffixes if labels repeat. `url` is UNIQUE, so mapping every host to the bare `localhost:8000` would collide when two channels sit on different bare hosts. If a rewrite would still clash, nothing is changed and the script stops so you can fix the domains by hand.
 - Runs `vendor/bin/shopware-deployment-helper run` (migrations/theme/cache). Pass `--no-finalize` to skip.
 
 ## Notes

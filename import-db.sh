@@ -10,16 +10,16 @@
 #   3. With --force on a populated DB: mysqldump backup -> var/db-backups/ first.
 #   4. Import the dump.
 #   5. Rewrite sales_channel_domain.url hosts (keep path): shortest host ->
-#      http://localhost:8000, each other host -> http://localhost:8000/<first-label>.
+#      <base-url>, each other host -> <base-url>/<first-label>.
 #   6. Run vendor/bin/shopware-deployment-helper run (migrations/theme/cache).
 #
 # --localize-only skips 1-4 for a dump that is already imported: steps 5-6 only.
 #
 # Usage:
-#   import-db.sh <dump-file> [db-name] [--force] [--no-finalize]
-#   import-db.sh --localize-only [db-name] [--no-finalize]
+#   import-db.sh <dump-file> [db-name] [--force] [--no-finalize] [--base-url=URL]
+#   import-db.sh --localize-only [db-name] [--no-finalize] [--base-url=URL]
 #
-# Defaults: db-name=shopware. Exits 2 when --force is required (agent should
+# Defaults: db-name=shopware, base-url=http://localhost:8000. Exits 2 when --force is required (agent should
 # ask the user, then re-run with --force).
 
 set -euo pipefail
@@ -44,6 +44,8 @@ for arg in "$@"; do
     --force)         FORCE=1 ;;
     --no-finalize)   FINALIZE=0 ;;
     --localize-only) LOCALIZE_ONLY=1 ;;
+    --base-url=*)    LOCAL_URL="${arg#*=}"; LOCAL_URL="${LOCAL_URL%/}" ;;
+    --base-url)      die "--base-url needs a value: --base-url=https://shop.local" ;;
     -*)              die "unknown flag: $arg" ;;
     *)
       NPOS=$((NPOS + 1))
@@ -53,6 +55,8 @@ for arg in "$@"; do
       ;;
   esac
 done
+# Spliced into SQL like the dump hosts, so same allowlist; paths aren't supported.
+[[ "$LOCAL_URL" =~ ^https?://[A-Za-z0-9.:-]+$ ]] || die "--base-url must be scheme://host[:port] with no path, got: $LOCAL_URL"
 
 if [[ "$LOCALIZE_ONLY" -eq 1 ]]; then
   [[ "$NPOS" -le 1 ]] || die "--localize-only takes no dump file. Usage: import-db.sh --localize-only [db-name]"
